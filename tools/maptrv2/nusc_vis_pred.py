@@ -357,10 +357,6 @@ def main():
         pts_3d = result_dic['pts_3d']
         keep = scores_3d > args.score_thresh
 
-        plt.figure(figsize=(2, 4))
-        plt.xlim(pc_range[0], pc_range[3])
-        plt.ylim(pc_range[1], pc_range[4])
-        plt.axis('off')
         for pred_score_3d, pred_bbox_3d, pred_label_3d, pred_pts_3d in zip(scores_3d[keep], boxes_3d[keep],labels_3d[keep], pts_3d[keep]):
 
             pred_pts_3d = pred_pts_3d.numpy()

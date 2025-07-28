@@ -147,7 +147,7 @@ def format_res_gt_by_classes(result_path,
                              eval_use_same_gt_sample_num_flag=False,
                              pc_range=[-15.0, -30.0, -5.0, 15.0, 30.0, 3.0],
                              code_size=2,
-                             nproc=24):
+                             nproc=6):
     assert cls_names is not None
     timer = mmcv.Timer()
     num_fixed_sample_pts = 100
@@ -234,7 +234,7 @@ def eval_map(gen_results,
              metric=None,
              num_pred_pts_per_instance=30,
              code_size=2,
-             nproc=24):
+             nproc=6):
     timer = mmcv.Timer()
     pool = Pool(nproc)
 
