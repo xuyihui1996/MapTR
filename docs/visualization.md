@@ -7,11 +7,7 @@ We provide all the visualization scripts under `/path/to/MapTR/tools/maptr/`
 ```shell
 cd /path/to/MapTR/
 export PYTHONPATH="/path/to/MapTR/"
-# visualize nuscenes dataset
-python tools/maptrv2/nusc_vis_pred.py /path/to/experiment/config /path/to/experiment/ckpt
-
-#visualize argoverse2 dataset
-python tools/maptrv2/av2_vis_pred.py /path/to/experiment/config /path/to/experiment/ckpt
+python tools/maptr/vis_pred.py /path/to/experiment/config /path/to/experiment/ckpt
 ```
 **Notes**: 
 

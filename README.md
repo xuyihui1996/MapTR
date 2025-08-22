@@ -2,7 +2,7 @@
 <h1>MapTR <img src="assets/map.png" width="30"></h1>
 <h3>An End-to-End Framework for Online Vectorized HD Map Construction</h3>
 
-[Bencheng Liao](https://github.com/LegendBC)<sup>1,2,3</sup> \*, [Shaoyu Chen](https://scholar.google.com/citations?user=PIeNN2gAAAAJ&hl=en&oi=sra)<sup>1,3</sup> \*, Yunchi Zhang<sup>1,3</sup> \*, [Bo Jiang](https://github.com/rb93dett)<sup>1,3</sup> \*,[Tianheng Cheng](https://scholar.google.com/citations?user=PH8rJHYAAAAJ&hl=zh-CN)<sup>1,3</sup>, [Qian Zhang](https://scholar.google.com/citations?user=pCY-bikAAAAJ&hl=zh-CN)<sup>3</sup>, [Wenyu Liu](http://eic.hust.edu.cn/professor/liuwenyu/)<sup>1</sup>, [Chang Huang](https://scholar.google.com/citations?user=IyyEKyIAAAAJ&hl=zh-CN)<sup>3</sup>, [Xinggang Wang](https://xinggangw.info/)<sup>1 :email:</sup>
+[Bencheng Liao](https://github.com/LegendBC)<sup>1,2,3</sup> \*, [Shaoyu Chen](https://scholar.google.com/citations?user=PIeNN2gAAAAJ&hl=en&oi=sra)<sup>1,3</sup> \*, [Yunchi Zhang](https://github.com/zyc10ud)<sup>1,3</sup> , [Bo Jiang](https://github.com/rb93dett)<sup>1,3</sup> ,[Tianheng Cheng](https://scholar.google.com/citations?user=PH8rJHYAAAAJ&hl=zh-CN)<sup>1,3</sup>, [Qian Zhang](https://scholar.google.com/citations?user=pCY-bikAAAAJ&hl=zh-CN)<sup>3</sup>, [Wenyu Liu](http://eic.hust.edu.cn/professor/liuwenyu/)<sup>1</sup>, [Chang Huang](https://scholar.google.com/citations?user=IyyEKyIAAAAJ&hl=zh-CN)<sup>3</sup>, [Xinggang Wang](https://xwcv.github.io)<sup>1 :email:</sup>
  
 <sup>1</sup> School of EIC, HUST, <sup>2</sup> Institute of Artificial Intelligence, HUST, <sup>3</sup> Horizon Robotics
 
@@ -12,12 +12,15 @@ ArXiv Preprint ([arXiv 2208.14437](https://arxiv.org/abs/2208.14437))
 
 [openreview ICLR'23](https://openreview.net/forum?id=k7p_YAO7yE), accepted as **ICLR Spotlight**
 
-extended ArXiv Preprint MapTRv2 ([arXiv 2308.05736](https://arxiv.org/abs/2308.05736))
+extended ArXiv Preprint MapTRv2 ([arXiv 2308.05736](https://arxiv.org/abs/2308.05736)), accepted to [**IJCV 2024**](https://link.springer.com/article/10.1007/s11263-024-02235-z)
 
 </div>
 
 #
 ### News
+* **`Feb. 27th, 2025`:** Check out our latest work, [DiffusionDrive](https://github.com/hustvl/DiffusionDrive), accepted to CVPR 2025! This study explores multi-modal end-to-end driving using diffusion models for real-time and real-world applications.
+* **`Oct. 6th, 2024`:** MapTRv2 is accepted to IJCV 2024!
+* **`Feb 20th, 2024`:** MapTRv2-based VADv2 is presented on arXiv  [paper](https://arxiv.org/pdf/2402.13243)    [project page](https://hgao-cv.github.io/VADv2/).
 * **`Aug. 31th, 2023`:** initial MapTRv2 is released at ***maptrv2*** branch. Please run `git checkout maptrv2` to use it.
 * **`Aug. 14th, 2023`:** As required by many researchers, the code of MapTR-based map annotation framework (VMA) will be released at https://github.com/hustvl/VMA recently.
 * **`Aug. 10th, 2023`:** We release [MapTRv2](https://arxiv.org/abs/2308.05736) on Arxiv. MapTRv2 demonstrates much stronger performance and much faster convergence. To better meet the requirement of the downstream planner (like [PDM](https://github.com/autonomousvision/nuplan_garage)), we introduce an extra semantic——centerline (using path-wise modeling proposed by [LaneGAP](https://github.com/hustvl/LaneGAP)). Code & model will be released in late August. Please stay tuned!
@@ -40,7 +43,7 @@ High-definition (HD) map provides abundant and precise static environmental info
 > Results from the [MapTRv2 paper](https://arxiv.org/abs/2308.05736)
 
 
-![comparison]()
+![comparison](assets/comparison.png "comparison")
 
 | Method | Backbone | Lr Schd | mAP| FPS|
 | :---: | :---: | :---: | :---: | :---: 
@@ -71,6 +74,12 @@ High-definition (HD) map provides abundant and precise static environmental info
 | MapTR-tiny | Camera & LiDAR | GKT |24ep | 62.7 | 6.0 | 11858M (bs 4)|[config](projects/configs/maptr/maptr_tiny_fusion_24e.py) |[model](https://drive.google.com/file/d/1CFlJrl3ZDj3gIOysf5Cli9bX5LEYSYO4/view?usp=share_link) / [log](https://drive.google.com/file/d/1rb3S4oluxdZjNm2aJ5lBH23jrkYIaJbC/view?usp=share_link) |
 | MapTR-tiny | R50 | bevpool |24ep | 50.1 | 14.7 | 9817M (bs 4)|[config](projects/configs/maptr/maptr_tiny_r50_24e_bevpool.py) |[model](https://drive.google.com/file/d/16PK9XohV55_3qPVDtpXIl4_Iumw9EnfA/view?usp=sharing) / [log](https://drive.google.com/file/d/14nioV3_VV9KehmxK7XcAHxM8X6JH5WIr/view?usp=sharing) |
 | MapTR-tiny | R50 | bevformer |24ep | 48.7 | 15.0 | 10219M (bs 4)|[config](projects/configs/maptr/maptr_tiny_r50_24e_bevformer.py) |[model](https://drive.google.com/file/d/1y-UBwGBSb2xiV40AuQEBhB-xJyV7VusX/view?usp=sharing) / [log](https://drive.google.com/file/d/1r35bRhTGVtyZTP8drXBTOIhLYGCzjEaF/view?usp=sharing) |
+| MapTR-tiny<sup>+</sup> | R50 | GKT |24ep | 51.3 | 15.1 | 15158M (bs 4)|[config](projects/configs/maptr/maptr_tiny_r50_24e_t4.py) |[model](https://drive.google.com/file/d/1SWmBriDG8vwLXmWTHGVdrRUrDBxzGa3a/view?usp=drive_link) / [log](https://drive.google.com/file/d/1pJmNL7AhmkwA5Er6nZVpw7qApEhcwMFY/view?usp=drive_link) |
+| MapTR-tiny<sup>+</sup> | R50 | bevformer |24ep | 53.3 | 15.0 | 15087M (bs 4)|[config](projects/configs/maptr/maptr_tiny_r50_24e_bevformer_t4.py) |[model](https://drive.google.com/file/d/1sbXTawEbpV61TwVULCMRRDTLYzZ6SL7U/view?usp=sharing) / [log](https://drive.google.com/file/d/1YGI_X6Cb2zV13CHMsDvEs8RJRMzeiUzM/view?usp=sharing) |
+
+**Notes**: 
+
+-  <sup>+</sup> means that we introduce temporal setting.
 
 ### MapTRv2
 Please `git checkout maptrv2` and follow the install instruction to use following checkpoint
@@ -79,11 +88,16 @@ Please `git checkout maptrv2` and follow the install instruction to use followin
 
 | Method | Backbone | BEVEncoder |Lr Schd | mAP| FPS|memory | Config | Download |
 | :---: | :---: | :---: | :---: |  :---: | :---:|:---:| :---: | :---: |
-| MapTRv2| R50 |bevpool | 24ep | WIP |14.1| WIP (bs 24) |[config](https://github.com/hustvl/MapTR/blob/maptrv2/projects/configs/maptrv2/maptrv2_nusc_r50_24ep.py) |model / log |
-| MapTRv2*| R50 |bevpool | 24ep | WIP |WIP| WIP (bs 24) |[config](https://github.com/hustvl/MapTR/blob/maptrv2/projects/configs/maptrv2/maptrv2_nusc_r50_24ep_w_centerline.py) |model / log |
+| MapTRv2| R50 |bevpool | 24ep | 61.4 |14.1| 19426M (bs 24) |[config](https://github.com/hustvl/MapTR/blob/maptrv2/projects/configs/maptrv2/maptrv2_nusc_r50_24ep.py) |[model](https://drive.google.com/file/d/1AmQ3fT-J-MM4B8kh_9Gm2G5guM92Agww/view?usp=sharing) / [log](https://drive.google.com/file/d/1rrAXza6FTYUs8kfr5126qWU6-FNGGMwD/view?usp=sharing) |
+| MapTRv2*| R50 |bevpool | 24ep | 54.3 |WIP| 20363M (bs 24) |[config](https://github.com/hustvl/MapTR/blob/maptrv2/projects/configs/maptrv2/maptrv2_nusc_r50_24ep_w_centerline.py) |[model](https://drive.google.com/file/d/1m02OKAKPhzMOaSu_4STVcepY8jbE7v3o/view?usp=sharing) / [log](https://drive.google.com/file/d/1cEV7sfiWS0-9Uu1eQEt2xm77l4mAuHMM/view?usp=sharing) |
 
 
 <div align="center"><h4> Argoverse2 dataset</h4></div>
+
+| Method | Backbone | BEVEncoder |Lr Schd | mAP| FPS|memory | Config | Download |
+| :---: | :---: | :---: | :---: |  :---: | :---:|:---:| :---: | :---: |
+| MapTRv2| R50 |bevpool | 6ep | 64.3 |14.1| 20580 (bs 24) |[config](https://github.com/hustvl/MapTR/blob/maptrv2/projects/configs/maptrv2/maptrv2_av2_3d_r50_6ep.py) |[model](https://drive.google.com/file/d/18-uyyP4ijjMRizSSOsV0GnPgtMNlPfG5/view?usp=sharing) / [log](https://drive.google.com/file/d/1Z5-4ATksKZbcfnGLnEc5aEsxA79GlqRN/view?usp=sharing) |
+| MapTRv2*| R50 |bevpool | 6ep | 61.3 |WIP| 21515 (bs 24) |[config](https://github.com/hustvl/MapTR/blob/maptrv2/projects/configs/maptrv2/maptrv2_av2_3d_r50_6ep_w_centerline.py) |[model](https://drive.google.com/file/d/1wXugPxU8HKeGxPAyFdgb53D5_zGmiCen/view?usp=sharing) / [log](https://drive.google.com/file/d/1vm60KzlGrbz5IEAXgKyqxrOydUF1F-6E/view?usp=sharing) |
 
 **Notes**: 
 
@@ -119,14 +133,14 @@ https://user-images.githubusercontent.com/26790424/229679664-0e9ba5e8-bf2c-45e0-
 
 ## Getting Started
 - [Installation](docs/install.md)
-- [Prepare Dataset](docs/prepare_dataset.md) (Notes: annotation generation of MapTRv2 is different from MapTR )
+- [Prepare Dataset](docs/prepare_dataset.md)
 - [Train and Eval](docs/train_eval.md)
 - [Visualization](docs/visualization.md)
 
 
 ## Catalog
-
-- [ ] centerline detection & topology support
+- [x] temporal modules
+- [x] centerline detection & topology support (refer to ***maptrv2*** branch)
 - [x] multi-modal checkpoints
 - [x] multi-modal code
 - [ ] lidar modality code
@@ -143,6 +157,16 @@ MapTR is based on [mmdetection3d](https://github.com/open-mmlab/mmdetection3d). 
 ## Citation
 If you find MapTR is useful in your research or applications, please consider giving us a star 🌟 and citing it by the following BibTeX entry.
 ```bibtex
+@article{liao2024maptrv2,
+  title={Maptrv2: An end-to-end framework for online vectorized hd map construction},
+  author={Liao, Bencheng and Chen, Shaoyu and Zhang, Yunchi and Jiang, Bo and Zhang, Qian and Liu, Wenyu and Huang, Chang and Wang, Xinggang},
+  journal={International Journal of Computer Vision},
+  pages={1--23},
+  year={2024},
+  publisher={Springer}
+}
+```
+```bibtex
 @inproceedings{MapTR,
   title={MapTR: Structured Modeling and Learning for Online Vectorized HD Map Construction},
   author={Liao, Bencheng and Chen, Shaoyu and Wang, Xinggang and Cheng, Tianheng, and Zhang, Qian and Liu, Wenyu and Huang, Chang},
@@ -151,10 +175,12 @@ If you find MapTR is useful in your research or applications, please consider gi
 }
 ```
 ```bibtex
-@inproceedings{MapTRv2,
-  title={MapTRv2: An End-to-End Framework for Online Vectorized HD Map Construction},
-  author={Liao, Bencheng and Chen, Shaoyu and Zhang, Yunchi and Jiang, Bo and Zhang, Qian and Liu, Wenyu and Huang, Chang and Wang, Xinggang},
-  booktitle={arXiv preprint arXiv: 2308.05736},
-  year={2023}
+@inproceedings{liao2025lane,
+  title={Lane graph as path: Continuity-preserving path-wise modeling for online lane graph construction},
+  author={Liao, Bencheng and Chen, Shaoyu and Jiang, Bo and Cheng, Tianheng and Zhang, Qian and Liu, Wenyu and Huang, Chang and Wang, Xinggang},
+  booktitle={European Conference on Computer Vision},
+  pages={334--351},
+  year={2024},
+  organization={Springer}
 }
 ```

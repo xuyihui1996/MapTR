@@ -21,6 +21,9 @@ import time
 import os.path as osp
 import numpy as np
 from PIL import Image
+import json
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import transforms
 from matplotlib.patches import Rectangle
@@ -60,6 +63,20 @@ CANDIDATE=['n008-2018-08-01-15-16-36-0400_1533151184047036',
            'n015-2018-11-21-19-21-35+0800_1542799758948001',
            ]
 
+
+def _to_serializable(insts):
+    out = []
+    for x in insts:
+        poly = x.get('polyline')
+        if isinstance(poly, np.ndarray):
+            poly = poly.astype(float).tolist()
+        else:
+            poly = np.asarray(poly, dtype=float).tolist()
+        item = {k: v for k, v in x.items() if k != 'polyline'}
+        item['polyline'] = poly
+        out.append(item)
+    return out
+
 def perspective(cam_coords, proj_mat):
     pix_coords = proj_mat @ cam_coords
     valid_idx = pix_coords[2, :] > 0
@@ -83,6 +100,9 @@ def parse_args():
         default=['fixed_num_pts',],
         help='vis format, default should be "points",'
         'support ["se_pts","bbox","fixed_num_pts","polyline_pts"]')
+    parser.add_argument('--dump-vectors', action='store_true',
+                        help='save per-sample pred/gt polylines to vectors.json')
+    parser.add_argument('--dump-name', default='vectors.json', type=str)
     args = parser.parse_args()
     return args
 
@@ -217,7 +237,7 @@ def main():
         if ~(data['gt_labels_3d'].data[0][0] != -1).any():
             # import pdb;pdb.set_trace()
             logger.error(f'\n empty gt for index {i}, continue')
-            # prog_bar.update()  
+            # prog_bar.update()
             continue
        
         
@@ -225,6 +245,7 @@ def main():
         img_metas = data['img_metas'][0].data[0]
         gt_bboxes_3d = data['gt_bboxes_3d'].data[0]
         gt_labels_3d = data['gt_labels_3d'].data[0]
+        gt_instances = []
 
         pts_filename = img_metas[0]['pts_filename']
         pts_filename = osp.basename(pts_filename)
@@ -319,11 +340,12 @@ def main():
                 plt.ylim(pc_range[1], pc_range[4])
                 plt.axis('off')
                 gt_lines_instance = gt_bboxes_3d[0].instance_list
-                # import pdb;pdb.set_trace()
                 for gt_line_instance, gt_label_3d in zip(gt_lines_instance, gt_labels_3d[0]):
                     pts = np.array(list(gt_line_instance.coords))
                     x = np.array([pt[0] for pt in pts])
                     y = np.array([pt[1] for pt in pts])
+                    gt_instances.append({'category': dataset.CLASSES[gt_label_3d],
+                                         'polyline': pts})
                     
                     # plt.quiver(x[:-1], y[:-1], x[1:] - x[:-1], y[1:] - y[:-1], scale_units='xy', angles='xy', scale=1, color=colors_plt[gt_label_3d])
 
@@ -334,7 +356,7 @@ def main():
 
                 gt_polyline_map_path = osp.join(sample_dir, 'GT_polyline_pts_MAP.png')
                 plt.savefig(gt_polyline_map_path, bbox_inches='tight', format='png',dpi=1200)
-                plt.close()           
+                plt.close()
 
             else: 
                 logger.error(f'WRONG visformat for GT: {vis_format}')
@@ -346,31 +368,38 @@ def main():
         plt.xlim(pc_range[0], pc_range[3])
         plt.ylim(pc_range[1], pc_range[4])
         plt.axis('off')
-
         # visualize pred
-        # import pdb;pdb.set_trace()
         result_dic = result[0]['pts_bbox']
-        boxes_3d = result_dic['boxes_3d'] # bbox: xmin, ymin, xmax, ymax
+        boxes_3d = result_dic['boxes_3d']  # bbox: xmin, ymin, xmax, ymax
         scores_3d = result_dic['scores_3d']
         labels_3d = result_dic['labels_3d']
         pts_3d = result_dic['pts_3d']
         keep = scores_3d > args.score_thresh
+        pred_instances = []
 
         plt.figure(figsize=(2, 4))
         plt.xlim(pc_range[0], pc_range[3])
         plt.ylim(pc_range[1], pc_range[4])
         plt.axis('off')
-        for pred_score_3d, pred_bbox_3d, pred_label_3d, pred_pts_3d in zip(scores_3d[keep], boxes_3d[keep],labels_3d[keep], pts_3d[keep]):
+        for pred_score_3d, pred_bbox_3d, pred_label_3d, pred_pts_3d in zip(
+                scores_3d[keep], boxes_3d[keep], labels_3d[keep], pts_3d[keep]):
 
             pred_pts_3d = pred_pts_3d.numpy()
-            pts_x = pred_pts_3d[:,0]
-            pts_y = pred_pts_3d[:,1]
-            plt.plot(pts_x, pts_y, color=colors_plt[pred_label_3d],linewidth=1,alpha=0.8,zorder=-1)
-            plt.scatter(pts_x, pts_y, color=colors_plt[pred_label_3d],s=1,alpha=0.8,zorder=-1)
+            pts_x = pred_pts_3d[:, 0]
+            pts_y = pred_pts_3d[:, 1]
+            plt.plot(pts_x, pts_y, color=colors_plt[pred_label_3d],
+                     linewidth=1, alpha=0.8, zorder=-1)
+            plt.scatter(pts_x, pts_y, color=colors_plt[pred_label_3d],
+                        s=1, alpha=0.8, zorder=-1)
 
+            pred_instances.append({
+                'category': dataset.CLASSES[pred_label_3d],
+                'score': float(pred_score_3d),
+                'polyline': pred_pts_3d
+            })
 
             pred_bbox_3d = pred_bbox_3d.numpy()
-            xy = (pred_bbox_3d[0],pred_bbox_3d[1])
+            xy = (pred_bbox_3d[0], pred_bbox_3d[1])
             width = pred_bbox_3d[2] - pred_bbox_3d[0]
             height = pred_bbox_3d[3] - pred_bbox_3d[1]
             pred_score_3d = float(pred_score_3d)
@@ -382,10 +411,23 @@ def main():
         plt.imshow(car_img, extent=[-1.2, 1.2, -1.5, 1.5])
 
         map_path = osp.join(sample_dir, 'PRED_MAP_plot.png')
-        plt.savefig(map_path, bbox_inches='tight', format='png',dpi=1200)
+        plt.savefig(map_path, bbox_inches='tight', format='png', dpi=1200)
         plt.close()
 
-        
+        if args.dump_vectors:
+            meta_info = img_metas[0]
+            vec = {
+                'meta': {
+                    'sample_token': meta_info.get('sample_token', ''),
+                    'scene': meta_info.get('scene_name', ''),
+                    'timestamp': int(meta_info.get('timestamp', 0)),
+                },
+                'pred': _to_serializable(pred_instances),
+                'gt': _to_serializable(gt_instances),
+            }
+            with open(osp.join(sample_dir, args.dump_name), 'w') as f:
+                json.dump(vec, f)
+
         prog_bar.update()
 
     logger.info('\n DONE vis test dataset samples gt label & pred')

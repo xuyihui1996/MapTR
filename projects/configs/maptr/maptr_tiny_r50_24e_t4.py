@@ -9,17 +9,8 @@ plugin_dir = 'projects/mmdet3d_plugin/'
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
 # point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
-point_cloud_range = [-30.0, -15.0, -5.0, 30.0, 15.0, 3.0]
-voxel_size = [0.15, 0.15, 8.0]
-dbound=[1.0, 35.0, 0.5]
-
-grid_config = {
-    'x': [-30.0, -30.0, 0.15], # useless
-    'y': [-15.0, -15.0, 0.15], # useless
-    'z': [-10, 10, 20],        # useless
-    'depth': [1.0, 35.0, 0.5], # useful
-}
-
+point_cloud_range = [-15.0, -30.0, -2.0, 15.0, 30.0, 2.0]
+voxel_size = [0.15, 0.15, 4]
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -30,10 +21,9 @@ class_names = [
     'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
 ]
 # map has classes: divider, ped_crossing, boundary
-map_classes = ['divider', 'ped_crossing','boundary', 'centerline']
+map_classes = ['divider', 'ped_crossing','boundary']
 # fixed_ptsnum_per_line = 20
 # map_classes = ['divider',]
-num_vec=70
 fixed_ptsnum_per_gt_line = 20 # now only support fixed_pts > 0
 fixed_ptsnum_per_pred_line = 20
 eval_use_same_gt_sample_num_flag=True
@@ -52,26 +42,12 @@ _ffn_dim_ = _dim_*2
 _num_levels_ = 1
 # bev_h_ = 50
 # bev_w_ = 50
-bev_h_ = 100
-bev_w_ = 200
-queue_length = 1 # each sequence contains `queue_length` frames.
-
-aux_seg_cfg = dict(
-    use_aux_seg=True,
-    bev_seg=True,
-    pv_seg=True,
-    seg_classes=1,
-    feat_down_sample=32,
-    pv_thickness=1,
-)
-
-z_cfg = dict(
-    pred_z_flag=True,
-    gt_z_flag=True,
-)
+bev_h_ = 200
+bev_w_ = 100
+queue_length = 4 # each sequence contains `queue_length` frames.
 
 model = dict(
-    type='MapTRv2',
+    type='MapTR',
     use_grid_mask=True,
     video_test_mode=False,
     pretrained=dict(img='ckpts/resnet50-19c8e357.pth'),
@@ -93,13 +69,11 @@ model = dict(
         num_outs=_num_levels_,
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='MapTRv2Head',
+        type='MapTRHead',
         bev_h=bev_h_,
         bev_w=bev_w_,
         num_query=900,
-        num_vec_one2one=num_vec,
-        num_vec_one2many=300,
-        k_one2many=6,
+        num_vec=50,
         num_pts_per_vec=fixed_ptsnum_per_pred_line, # one bbox
         num_pts_per_gt_vec=fixed_ptsnum_per_gt_line,
         dir_interval=1,
@@ -111,44 +85,52 @@ model = dict(
         sync_cls_avg_factor=True,
         with_box_refine=True,
         as_two_stage=False,
-        code_size=3,
+        code_size=2,
         code_weights=[1.0, 1.0, 1.0, 1.0],
-        aux_seg=aux_seg_cfg,
-        z_cfg=z_cfg,
         transformer=dict(
             type='MapTRPerceptionTransformer',
-            num_cams=7,
-            z_cfg=z_cfg,
             rotate_prev_bev=True,
             use_shift=True,
             use_can_bus=True,
+            len_can_bus=6,
             embed_dims=_dim_,
             encoder=dict(
-                type='LSSTransform',
-                in_channels=_dim_,
-                out_channels=_dim_,
-                feat_down_sample=32,
+                type='BEVFormerEncoder',
+                num_layers=1,
                 pc_range=point_cloud_range,
-                voxel_size=voxel_size,
-                dbound=dbound,
-                downsample=2,
-                loss_depth_weight=3.0,
-                depthnet_cfg=dict(use_dcn=False, with_cp=False, aspp_mid_channels=96),
-                grid_config=grid_config,),
+                num_points_in_pillar=4,
+                return_intermediate=False,
+                transformerlayers=dict(
+                    type='BEVFormerLayer',
+                    attn_cfgs=[
+                        dict(
+                            type='TemporalSelfAttention',
+                            embed_dims=_dim_,
+                            num_levels=1),
+                        dict(
+                            type='GeometrySptialCrossAttention',
+                            pc_range=point_cloud_range,
+                            attention=dict(
+                                type='GeometryKernelAttention',
+                                embed_dims=_dim_,
+                                num_heads=4,
+                                dilation=1,
+                                kernel_size=(3,5),
+                                num_levels=_num_levels_),
+                            embed_dims=_dim_,
+                        )
+                    ],
+                    feedforward_channels=_ffn_dim_,
+                    ffn_dropout=0.1,
+                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
+                                     'ffn', 'norm'))),
             decoder=dict(
                 type='MapTRDecoder',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
-                    type='DecoupledDetrTransformerDecoderLayer',
-                    num_vec=num_vec,
-                    num_pts_per_vec=fixed_ptsnum_per_pred_line,
+                    type='DetrTransformerDecoderLayer',
                     attn_cfgs=[
-                        dict(
-                            type='MultiheadAttention',
-                            embed_dims=_dim_,
-                            num_heads=8,
-                            dropout=0.1),
                         dict(
                             type='MultiheadAttention',
                             embed_dims=_dim_,
@@ -162,13 +144,12 @@ model = dict(
 
                     feedforward_channels=_ffn_dim_,
                     ffn_dropout=0.1,
-                    operation_order=('self_attn', 'norm', 'self_attn', 'norm','cross_attn', 'norm',
+                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')))),
         bbox_coder=dict(
             type='MapTRNMSFreeCoder',
             # post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-            z_cfg=z_cfg,
-            post_center_range=[-35, -20, -35, -20, 35, 20, 35, 20],
+            post_center_range=[-20, -35, -20, -35, 20, 35, 20, 35],
             pc_range=point_cloud_range,
             max_num=50,
             voxel_size=voxel_size,
@@ -189,13 +170,7 @@ model = dict(
         loss_iou=dict(type='GIoULoss', loss_weight=0.0),
         loss_pts=dict(type='PtsL1Loss', 
                       loss_weight=5.0),
-        loss_dir=dict(type='PtsDirCosLoss', loss_weight=0.005),
-        loss_seg=dict(type='SimpleLoss', 
-            pos_weight=4.0,
-            loss_weight=1.0),
-        loss_pv_seg=dict(type='SimpleLoss', 
-                    pos_weight=1.0,
-                    loss_weight=2.0),),
+        loss_dir=dict(type='PtsDirCosLoss', loss_weight=0.005)),
     # model training and testing settings
     train_cfg=dict(pts=dict(
         grid_size=[512, 512, 1],
@@ -204,7 +179,6 @@ model = dict(
         out_size_factor=4,
         assigner=dict(
             type='MapTRAssigner',
-            z_cfg=z_cfg,
             cls_cost=dict(type='FocalLossCost', weight=2.0),
             reg_cost=dict(type='BBoxL1Cost', weight=0.0, box_format='xywh'),
             # reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
@@ -214,38 +188,40 @@ model = dict(
                       weight=5),
             pc_range=point_cloud_range))))
 
-dataset_type = 'CustomAV2OfflineLocalMapDataset'
-data_root = 'data/argoverse2/sensor/'
+dataset_type = 'CustomNuScenesLocalMapDataset'
+data_root = 'data/nuscenes/'
 file_client_args = dict(backend='disk')
 
 
 train_pipeline = [
-    dict(type='CustomLoadMultiViewImageFromFiles', to_float32=True, padding=True),
-    dict(type='RandomScaleImageMultiViewImage', scales=[0.3]),
+    dict(type='LoadMultiViewImageFromFiles', to_float32=True),
     dict(type='PhotoMetricDistortionMultiViewImage'),
+    dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True, with_attr_label=False),
+    dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
+    dict(type='ObjectNameFilter', classes=class_names),
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
+    dict(type='RandomScaleImageMultiViewImage', scales=[0.5]),
     dict(type='PadMultiViewImage', size_divisor=32),
-    dict(type='DefaultFormatBundle3D', with_gt=False, with_label=False,class_names=map_classes),
-    dict(type='CustomCollect3D', keys=['img'])
+    dict(type='DefaultFormatBundle3D', class_names=class_names),
+    dict(type='CustomCollect3D', keys=['gt_bboxes_3d', 'gt_labels_3d', 'img'])
 ]
 
 test_pipeline = [
-    dict(type='CustomLoadMultiViewImageFromFiles', to_float32=True, padding=True),
-    dict(type='RandomScaleImageMultiViewImage', scales=[0.3]),
+    dict(type='LoadMultiViewImageFromFiles', to_float32=True),
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
    
     dict(
         type='MultiScaleFlipAug3D',
-        img_scale=(2048, 2048), # 2048*0.3, 2048*0.3
+        img_scale=(1600, 900),
         pts_scale_ratio=1,
         flip=False,
         transforms=[
+            dict(type='RandomScaleImageMultiViewImage', scales=[0.5]),
             dict(type='PadMultiViewImage', size_divisor=32),
             dict(
-                type='DefaultFormatBundle3D', 
-                with_gt=False, 
-                with_label=False,
-                class_names=map_classes),
+                type='DefaultFormatBundle3D',
+                class_names=class_names,
+                with_label=False),
             dict(type='CustomCollect3D', keys=['img'])
         ])
 ]
@@ -256,12 +232,10 @@ data = dict(
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=data_root + 'av2_map_infos_train.pkl',
-        z_cfg=z_cfg,
+        ann_file=data_root + 'nuscenes_infos_temporal_train.pkl',
         pipeline=train_pipeline,
         classes=class_names,
         modality=input_modality,
-        aux_seg=aux_seg_cfg,
         test_mode=False,
         use_valid_flag=True,
         bev_size=(bev_h_, bev_w_),
@@ -274,43 +248,28 @@ data = dict(
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
         box_type_3d='LiDAR'),
-    val=dict(
-        type=dataset_type,
-        data_root=data_root,
-        ann_file=data_root + 'av2_map_infos_val.pkl',
-        map_ann_file=data_root + 'av2_gt_map_anns_val.json',
-        # code_size=3,
-        z_cfg=z_cfg,
-        load_interval=4, # av2 uses 10 Hz, set to 5, 2HZ the same as nuscenes,
-        # load_interval=1, # TODO debug
-        pipeline=test_pipeline,  
-        bev_size=(bev_h_, bev_w_),
-        pc_range=point_cloud_range,
-        fixed_ptsnum_per_line=fixed_ptsnum_per_gt_line,
-        eval_use_same_gt_sample_num_flag=eval_use_same_gt_sample_num_flag,
-        padding_value=-10000,
-        map_classes=map_classes,
-        classes=class_names, 
-        modality=input_modality, 
-        samples_per_gpu=1),
-    test=dict(
-        type=dataset_type,
-        data_root=data_root,
-        ann_file=data_root + 'av2_map_infos_val.pkl',
-        map_ann_file=data_root + 'av2_gt_map_anns_val.json',
-        # code_size=3,
-        z_cfg=z_cfg,
-        load_interval=4, # av2 uses 10 Hz, set to 5, 2HZ the same as nuscenes,
-        # load_interval=1, # TODO debug
-        pipeline=test_pipeline, 
-        bev_size=(bev_h_, bev_w_),
-        pc_range=point_cloud_range,
-        fixed_ptsnum_per_line=fixed_ptsnum_per_gt_line,
-        eval_use_same_gt_sample_num_flag=eval_use_same_gt_sample_num_flag,
-        padding_value=-10000,
-        map_classes=map_classes,
-        classes=class_names, 
-        modality=input_modality),
+    val=dict(type=dataset_type,
+             data_root=data_root,
+             ann_file=data_root + 'nuscenes_infos_temporal_val.pkl',
+             map_ann_file=data_root + 'nuscenes_map_anns_val.json',
+             pipeline=test_pipeline,  bev_size=(bev_h_, bev_w_),
+             pc_range=point_cloud_range,
+             fixed_ptsnum_per_line=fixed_ptsnum_per_gt_line,
+             eval_use_same_gt_sample_num_flag=eval_use_same_gt_sample_num_flag,
+             padding_value=-10000,
+             map_classes=map_classes,
+             classes=class_names, modality=input_modality, samples_per_gpu=1),
+    test=dict(type=dataset_type,
+              data_root=data_root,
+              ann_file=data_root + 'nuscenes_infos_temporal_val.pkl',
+              map_ann_file=data_root + 'nuscenes_map_anns_val.json',
+              pipeline=test_pipeline, bev_size=(bev_h_, bev_w_),
+              pc_range=point_cloud_range,
+              fixed_ptsnum_per_line=fixed_ptsnum_per_gt_line,
+              eval_use_same_gt_sample_num_flag=eval_use_same_gt_sample_num_flag,
+              padding_value=-10000,
+              map_classes=map_classes,
+              classes=class_names, modality=input_modality),
     shuffler_sampler=dict(type='DistributedGroupSampler'),
     nonshuffler_sampler=dict(type='DistributedSampler')
 )
@@ -329,13 +288,13 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
     policy='CosineAnnealing',
     warmup='linear',
-    warmup_iters=200,
+    warmup_iters=500,
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
-total_epochs = 6
-evaluation = dict(interval=1, pipeline=test_pipeline, metric='chamfer')
+total_epochs = 24
 # total_epochs = 50
 # evaluation = dict(interval=1, pipeline=test_pipeline)
+evaluation = dict(interval=2, pipeline=test_pipeline, metric='chamfer')
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 
@@ -345,6 +304,5 @@ log_config = dict(
         dict(type='TextLoggerHook'),
         dict(type='TensorboardLoggerHook')
     ])
-fp16 = dict(loss_scale=512.)
+# fp16 = dict(loss_scale=512.)
 checkpoint_config = dict(interval=1)
-find_unused_parameters=True

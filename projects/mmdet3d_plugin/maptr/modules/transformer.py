@@ -46,10 +46,6 @@ class MapTRPerceptionTransformer(BaseModule):
     def __init__(self,
                  num_feature_levels=4,
                  num_cams=6,
-                 z_cfg=dict(
-                    pred_z_flag=False,
-                    gt_z_flag=False,
-                 ),
                  two_stage_num_proposals=300,
                  fuser=None,
                  encoder=None,
@@ -58,17 +54,16 @@ class MapTRPerceptionTransformer(BaseModule):
                  rotate_prev_bev=True,
                  use_shift=True,
                  use_can_bus=True,
+                 len_can_bus=18,
                  can_bus_norm=True,
                  use_cams_embeds=True,
                  rotate_center=[100, 100],
                  modality='vision',
-                 feat_down_sample_indice=-1,
                  **kwargs):
         super(MapTRPerceptionTransformer, self).__init__(**kwargs)
         if modality == 'fusion':
             self.fuser = build_fuser(fuser) #TODO
-        # self.use_attn_bev = encoder['type'] == 'BEVFormerEncoder'
-        self.use_attn_bev = 'BEVFormerEncoder' in encoder['type']
+        self.use_attn_bev = encoder['type'] == 'BEVFormerEncoder'
         self.encoder = build_transformer_layer_sequence(encoder)
         self.decoder = build_transformer_layer_sequence(decoder)
         self.embed_dims = embed_dims
@@ -79,14 +74,13 @@ class MapTRPerceptionTransformer(BaseModule):
         self.rotate_prev_bev = rotate_prev_bev
         self.use_shift = use_shift
         self.use_can_bus = use_can_bus
+        self.len_can_bus = len_can_bus
         self.can_bus_norm = can_bus_norm
         self.use_cams_embeds = use_cams_embeds
 
         self.two_stage_num_proposals = two_stage_num_proposals
-        self.z_cfg=z_cfg
         self.init_layers()
         self.rotate_center = rotate_center
-        self.feat_down_sample_indice = feat_down_sample_indice
 
     def init_layers(self):
         """Initialize layers of the Detr3DTransformer."""
@@ -94,10 +88,9 @@ class MapTRPerceptionTransformer(BaseModule):
             self.num_feature_levels, self.embed_dims))
         self.cams_embeds = nn.Parameter(
             torch.Tensor(self.num_cams, self.embed_dims))
-        self.reference_points = nn.Linear(self.embed_dims, 2) if not self.z_cfg['gt_z_flag'] \
-                            else nn.Linear(self.embed_dims, 3)
+        self.reference_points = nn.Linear(self.embed_dims, 2) # TODO, this is a hack
         self.can_bus_mlp = nn.Sequential(
-            nn.Linear(18, self.embed_dims // 2),
+            nn.Linear(self.len_can_bus, self.embed_dims // 2),
             nn.ReLU(inplace=True),
             nn.Linear(self.embed_dims // 2, self.embed_dims),
             nn.ReLU(inplace=True),
@@ -176,7 +169,7 @@ class MapTRPerceptionTransformer(BaseModule):
         # add can bus signals
         can_bus = bev_queries.new_tensor(
             [each['can_bus'] for each in kwargs['img_metas']])  # [:, :]
-        can_bus = self.can_bus_mlp(can_bus)[None, :, :]
+        can_bus = self.can_bus_mlp(can_bus[:, :self.len_can_bus])[None, :, :]
         bev_queries = bev_queries + can_bus * self.use_can_bus
 
         feat_flatten = []
@@ -201,11 +194,10 @@ class MapTRPerceptionTransformer(BaseModule):
         feat_flatten = feat_flatten.permute(
             0, 2, 1, 3)  # (num_cam, H*W, bs, embed_dims)
 
-        ret_dict = self.encoder(
+        bev_embed = self.encoder(
             bev_queries,
             feat_flatten,
             feat_flatten,
-            mlvl_feats=mlvl_feats,
             bev_h=bev_h,
             bev_w=bev_w,
             bev_pos=bev_pos,
@@ -215,28 +207,21 @@ class MapTRPerceptionTransformer(BaseModule):
             shift=shift,
             **kwargs
         )
-        return ret_dict
+        return bev_embed
 
     def lss_bev_encode(
             self,
             mlvl_feats,
             prev_bev=None,
             **kwargs):
-        # import ipdb;ipdb.set_trace()
-        # assert len(mlvl_feats) == 1, 'Currently we only use last single level feat in LSS'
-        # import ipdb;ipdb.set_trace()
-        images = mlvl_feats[self.feat_down_sample_indice]
+        assert len(mlvl_feats) == 1, 'Currently we only support single level feat in LSS'
+        images = mlvl_feats[0]
         img_metas = kwargs['img_metas']
-        encoder_outputdict = self.encoder(images,img_metas)
-        bev_embed = encoder_outputdict['bev']
-        depth = encoder_outputdict['depth']
+        bev_embed = self.encoder(images,img_metas)
         bs, c, _,_ = bev_embed.shape
         bev_embed = bev_embed.view(bs,c,-1).permute(0,2,1).contiguous()
-        ret_dict = dict(
-            bev=bev_embed,
-            depth=depth
-        )
-        return ret_dict
+        
+        return bev_embed
 
     def get_bev_features(
             self,
@@ -253,7 +238,7 @@ class MapTRPerceptionTransformer(BaseModule):
         obtain bev features.
         """
         if self.use_attn_bev:
-            ret_dict = self.attn_bev_encode(
+            bev_embed = self.attn_bev_encode(
                 mlvl_feats,
                 bev_queries,
                 bev_h,
@@ -262,15 +247,11 @@ class MapTRPerceptionTransformer(BaseModule):
                 bev_pos=bev_pos,
                 prev_bev=prev_bev,
                 **kwargs)
-            bev_embed = ret_dict['bev']
-            depth = ret_dict['depth']
         else:
-            ret_dict = self.lss_bev_encode(
+            bev_embed = self.lss_bev_encode(
                 mlvl_feats,
                 prev_bev=prev_bev,
                 **kwargs)
-            bev_embed = ret_dict['bev']
-            depth = ret_dict['depth']
         if lidar_feat is not None:
             bs = mlvl_feats[0].size(0)
             bev_embed = bev_embed.view(bs, bev_h, bev_w, -1).permute(0,3,1,2).contiguous()
@@ -279,37 +260,8 @@ class MapTRPerceptionTransformer(BaseModule):
             fused_bev = self.fuser([bev_embed, lidar_feat])
             fused_bev = fused_bev.flatten(2).permute(0,2,1).contiguous()
             bev_embed = fused_bev
-        ret_dict = dict(
-            bev=bev_embed,
-            depth=depth
-        )
-        return ret_dict
 
-    def format_feats(self, mlvl_feats):
-        bs = mlvl_feats[0].size(0)
-
-        feat_flatten = []
-        spatial_shapes = []
-        for lvl, feat in enumerate(mlvl_feats):
-            bs, num_cam, c, h, w = feat.shape
-            spatial_shape = (h, w)
-            feat = feat.flatten(3).permute(1, 0, 3, 2)
-            if self.use_cams_embeds:
-                feat = feat + self.cams_embeds[:, None, None, :].to(feat.dtype)
-            feat = feat + self.level_embeds[None,
-                                            None, lvl:lvl + 1, :].to(feat.dtype)
-            spatial_shapes.append(spatial_shape)
-            feat_flatten.append(feat)
-
-        feat_flatten = torch.cat(feat_flatten, 2)
-        spatial_shapes = torch.as_tensor(
-            spatial_shapes, dtype=torch.long, device=feat.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros(
-            (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-
-        feat_flatten = feat_flatten.permute(
-            0, 2, 1, 3)  # (num_cam, H*W, bs, embed_dims)
-        return feat_flatten, spatial_shapes, level_start_index
+        return bev_embed
     # TODO apply fp16 to this module cause grad_norm NAN
     # @auto_fp16(apply_to=('mlvl_feats', 'bev_queries', 'object_query_embed', 'prev_bev', 'bev_pos'))
     def forward(self,
@@ -362,7 +314,7 @@ class MapTRPerceptionTransformer(BaseModule):
                     otherwise None.
         """
 
-        ouput_dic = self.get_bev_features(
+        bev_embed = self.get_bev_features(
             mlvl_feats,
             lidar_feat,
             bev_queries,
@@ -372,8 +324,7 @@ class MapTRPerceptionTransformer(BaseModule):
             bev_pos=bev_pos,
             prev_bev=prev_bev,
             **kwargs)  # bev_embed shape: bs, bev_h*bev_w, embed_dims
-        bev_embed = ouput_dic['bev']
-        depth = ouput_dic['depth']
+
         bs = mlvl_feats[0].size(0)
         query_pos, query = torch.split(
             object_query_embed, self.embed_dims, dim=1)
@@ -387,9 +338,6 @@ class MapTRPerceptionTransformer(BaseModule):
         query_pos = query_pos.permute(1, 0, 2)
         bev_embed = bev_embed.permute(1, 0, 2)
 
-        feat_flatten, feat_spatial_shapes, feat_level_start_index \
-            = self.format_feats(mlvl_feats)
-
         inter_states, inter_references = self.decoder(
             query=query,
             key=None,
@@ -400,12 +348,8 @@ class MapTRPerceptionTransformer(BaseModule):
             cls_branches=cls_branches,
             spatial_shapes=torch.tensor([[bev_h, bev_w]], device=query.device),
             level_start_index=torch.tensor([0], device=query.device),
-            mlvl_feats=mlvl_feats,
-            feat_flatten=feat_flatten,
-            feat_spatial_shapes=feat_spatial_shapes,
-            feat_level_start_index=feat_level_start_index,
             **kwargs)
 
         inter_references_out = inter_references
 
-        return bev_embed, depth, inter_states, init_reference_out, inter_references_out
+        return bev_embed, inter_states, init_reference_out, inter_references_out
