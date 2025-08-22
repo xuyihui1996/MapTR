@@ -9,8 +9,9 @@ from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
 from mmcv.runner import force_fp32, auto_fp16
 from mmdet3d.ops import Voxelization, DynamicScatter
 from mmdet3d.models import builder
+from mmcv.utils import TORCH_VERSION, digit_version
 @DETECTORS.register_module()
-class MapTR(MVXTwoStageDetector):
+class MapTRv2(MVXTwoStageDetector):
     """MapTR.
     Args:
         video_test_mode (bool): Decide whether to use temporal information during inference.
@@ -37,7 +38,7 @@ class MapTR(MVXTwoStageDetector):
                  lidar_encoder=None,
                  ):
 
-        super(MapTR,
+        super(MapTRv2,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
                              img_backbone, pts_backbone, img_neck, pts_neck,
@@ -122,7 +123,10 @@ class MapTR(MVXTwoStageDetector):
                           gt_labels_3d,
                           img_metas,
                           gt_bboxes_ignore=None,
-                          prev_bev=None):
+                          prev_bev=None,
+                          gt_depth=None,
+                          gt_seg_mask=None,
+                          gt_pv_seg_mask=None,):
         """Forward function'
         Args:
             pts_feats (list[torch.Tensor]): Features of point cloud branch
@@ -140,8 +144,39 @@ class MapTR(MVXTwoStageDetector):
 
         outs = self.pts_bbox_head(
             pts_feats, lidar_feat, img_metas, prev_bev)
-        loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
-        losses = self.pts_bbox_head.loss(*loss_inputs, img_metas=img_metas)
+
+        depth = outs.pop('depth')
+        losses = dict()
+        # calculate depth loss
+        if gt_depth is not None:
+            loss_depth = self.pts_bbox_head.transformer.encoder.get_depth_loss(gt_depth, depth)
+            if digit_version(TORCH_VERSION) >= digit_version('1.8'):
+                loss_depth = torch.nan_to_num(loss_depth)
+            losses.update(loss_depth=loss_depth)
+
+        loss_inputs = [gt_bboxes_3d, gt_labels_3d, gt_seg_mask, gt_pv_seg_mask, outs]
+        losses_pts = self.pts_bbox_head.loss(*loss_inputs, img_metas=img_metas)
+        losses.update(losses_pts)
+        # import ipdb;ipdb.set_trace()
+        k_one2many = self.pts_bbox_head.k_one2many
+        multi_gt_bboxes_3d = copy.deepcopy(gt_bboxes_3d)
+        multi_gt_labels_3d = copy.deepcopy(gt_labels_3d)
+        for i, (each_gt_bboxes_3d, each_gt_labels_3d) in enumerate(zip(multi_gt_bboxes_3d, multi_gt_labels_3d)):
+            each_gt_bboxes_3d.instance_list = each_gt_bboxes_3d.instance_list * k_one2many
+            each_gt_bboxes_3d.instance_labels = each_gt_bboxes_3d.instance_labels * k_one2many
+            multi_gt_labels_3d[i] = each_gt_labels_3d.repeat(k_one2many)
+        # import ipdb;ipdb.set_trace()
+        one2many_outs = outs['one2many_outs']
+        loss_one2many_inputs = [multi_gt_bboxes_3d, multi_gt_labels_3d, gt_seg_mask, gt_pv_seg_mask, one2many_outs]
+        loss_dict_one2many = self.pts_bbox_head.loss(*loss_one2many_inputs, img_metas=img_metas)
+
+        lambda_one2many = self.pts_bbox_head.lambda_one2many
+        for key, value in loss_dict_one2many.items():
+            if key + "_one2many" in losses.keys():
+                losses[key + "_one2many"] += value * lambda_one2many
+            else:
+                losses[key + "_one2many"] = value * lambda_one2many
+        # import ipdb;ipdb.set_trace()
         return losses
 
     def forward_dummy(self, img):
@@ -234,6 +269,9 @@ class MapTR(MVXTwoStageDetector):
                       gt_bboxes_ignore=None,
                       img_depth=None,
                       img_mask=None,
+                      gt_depth=None,
+                      gt_seg_mask=None,
+                      gt_pv_seg_mask=None,
                       ):
         """Forward training function.
         Args:
@@ -276,7 +314,7 @@ class MapTR(MVXTwoStageDetector):
         losses = dict()
         losses_pts = self.forward_pts_train(img_feats, lidar_feat, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
-                                            gt_bboxes_ignore, prev_bev)
+                                            gt_bboxes_ignore, prev_bev, gt_depth,gt_seg_mask,gt_pv_seg_mask)
 
         losses.update(losses_pts)
         return losses
@@ -371,72 +409,3 @@ class MapTR(MVXTwoStageDetector):
             result_dict['pts_bbox'] = pts_bbox
         return new_prev_bev, bbox_list
 
-
-@DETECTORS.register_module()
-class MapTR_fp16(MapTR):
-    """
-    The default version BEVFormer currently can not support FP16. 
-    We provide this version to resolve this issue.
-    """
-    # @auto_fp16(apply_to=('img', 'prev_bev', 'points'))
-    @force_fp32(apply_to=('img','points','prev_bev'))
-    def forward_train(self,
-                      points=None,
-                      img_metas=None,
-                      gt_bboxes_3d=None,
-                      gt_labels_3d=None,
-                      gt_labels=None,
-                      gt_bboxes=None,
-                      img=None,
-                      proposals=None,
-                      gt_bboxes_ignore=None,
-                      img_depth=None,
-                      img_mask=None,
-                      prev_bev=None,
-                      ):
-        """Forward training function.
-        Args:
-            points (list[torch.Tensor], optional): Points of each sample.
-                Defaults to None.
-            img_metas (list[dict], optional): Meta information of each sample.
-                Defaults to None.
-            gt_bboxes_3d (list[:obj:`BaseInstance3DBoxes`], optional):
-                Ground truth 3D boxes. Defaults to None.
-            gt_labels_3d (list[torch.Tensor], optional): Ground truth labels
-                of 3D boxes. Defaults to None.
-            gt_labels (list[torch.Tensor], optional): Ground truth labels
-                of 2D boxes in images. Defaults to None.
-            gt_bboxes (list[torch.Tensor], optional): Ground truth 2D boxes in
-                images. Defaults to None.
-            img (torch.Tensor optional): Images of each sample with shape
-                (N, C, H, W). Defaults to None.
-            proposals ([list[torch.Tensor], optional): Predicted proposals
-                used for training Fast RCNN. Defaults to None.
-            gt_bboxes_ignore (list[torch.Tensor], optional): Ground truth
-                2D boxes in images to be ignored. Defaults to None.
-        Returns:
-            dict: Losses of different branches.
-        """
-        
-        img_feats = self.extract_feat(img=img, img_metas=img_metas)
-        # import pdb;pdb.set_trace()
-        losses = dict()
-        losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
-                                            gt_labels_3d, img_metas,
-                                            gt_bboxes_ignore, prev_bev=prev_bev)
-        losses.update(losses_pts)
-        return losses
-
-
-    def val_step(self, data, optimizer):
-        """
-        In BEVFormer_fp16, we use this `val_step` function to inference the `prev_pev`.
-        This is not the standard function of `val_step`.
-        """
-
-        img = data['img']
-        img_metas = data['img_metas']
-        img_feats = self.extract_feat(img=img,  img_metas=img_metas)
-        prev_bev = data.get('prev_bev', None)
-        prev_bev = self.pts_bbox_head(img_feats, img_metas, prev_bev=prev_bev, only_bev=True)
-        return prev_bev

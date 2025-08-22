@@ -12,6 +12,8 @@ from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
 from mmdet3d.utils import collect_env, get_root_logger
 from mmdet3d.apis import single_gpu_test
 from mmdet3d.datasets import build_dataset
+import sys
+sys.path.append('')
 from projects.mmdet3d_plugin.datasets.builder import build_dataloader
 from mmdet3d.models import build_model
 from mmdet.apis import set_random_seed
@@ -25,6 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib import transforms
 from matplotlib.patches import Rectangle
 import cv2
+
 
 CAMS = ['CAM_FRONT_LEFT','CAM_FRONT','CAM_FRONT_RIGHT',
              'CAM_BACK_LEFT','CAM_BACK','CAM_BACK_RIGHT',]
@@ -199,12 +202,10 @@ def main():
     car_img = Image.open('./figs/lidar_car.png')
 
     # get color map: divider->r, ped->b, boundary->g
-    colors_plt = ['orange', 'b', 'g']
+    colors_plt = ['orange', 'b', 'r', 'g']
 
 
     logger.info('BEGIN vis test dataset samples gt label & pred')
-
-
 
     bbox_results = []
     mask_results = []
@@ -356,10 +357,6 @@ def main():
         pts_3d = result_dic['pts_3d']
         keep = scores_3d > args.score_thresh
 
-        plt.figure(figsize=(2, 4))
-        plt.xlim(pc_range[0], pc_range[3])
-        plt.ylim(pc_range[1], pc_range[4])
-        plt.axis('off')
         for pred_score_3d, pred_bbox_3d, pred_label_3d, pred_pts_3d in zip(scores_3d[keep], boxes_3d[keep],labels_3d[keep], pts_3d[keep]):
 
             pred_pts_3d = pred_pts_3d.numpy()
@@ -377,15 +374,12 @@ def main():
             pred_score_3d = round(pred_score_3d, 2)
             s = str(pred_score_3d)
 
-
-
         plt.imshow(car_img, extent=[-1.2, 1.2, -1.5, 1.5])
 
         map_path = osp.join(sample_dir, 'PRED_MAP_plot.png')
         plt.savefig(map_path, bbox_inches='tight', format='png',dpi=1200)
         plt.close()
 
-        
         prog_bar.update()
 
     logger.info('\n DONE vis test dataset samples gt label & pred')

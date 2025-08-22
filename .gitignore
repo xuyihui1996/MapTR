@@ -145,3 +145,7 @@ dmypy.json
 .pyre/
 
 cluster.sh
+*.mp4
+*.MP4
+*.mp4
+*.MP4
