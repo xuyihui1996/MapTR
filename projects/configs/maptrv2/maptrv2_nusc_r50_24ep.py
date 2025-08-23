@@ -303,10 +303,10 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=6e-4,
+    lr=7.0e-4,
     paramwise_cfg=dict(
         custom_keys={
-            'img_backbone': dict(lr_mult=0.1),
+            'img_backbone': dict(lr_mult=0.2),
         }),
     weight_decay=0.01)
 
@@ -315,10 +315,10 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
     policy='CosineAnnealing',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=800,
     warmup_ratio=1.0 / 3,
-    min_lr_ratio=1e-3)
-total_epochs = 24
+    min_lr_ratio=3e-3)
+total_epochs = 32
 evaluation = dict(interval=2, pipeline=test_pipeline, metric='chamfer',
                   save_best='NuscMap_chamfer/mAP', rule='greater')
 # total_epochs = 50
@@ -332,6 +332,10 @@ log_config = dict(
         dict(type='TextLoggerHook'),
         dict(type='TensorboardLoggerHook')
     ])
-fp16 = dict(loss_scale=512.)
+# fp16 = dict(loss_scale=512.)
+fp16 = dict(loss_scale='dynamic')
+
 checkpoint_config = dict(max_keep_ckpts=1, interval=2)
 find_unused_parameters=True
+auto_scale_lr = dict(enable=True, base_batch_size=32)  # 4 × 8
+
